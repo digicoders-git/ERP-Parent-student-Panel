@@ -62,7 +62,7 @@ const Sidebar = ({ onMenuClick, activeItem, setActiveItem, isExpanded, setIsExpa
     {
       id: 'attendance',
       name: 'Attendance',
-      icon: <MdEventNote className="w-5 h-5" />,
+  icon: <MdEventNote className="w-5 h-5" />,
       hideFor: ['warden']
     },
     {
@@ -127,6 +127,12 @@ const Sidebar = ({ onMenuClick, activeItem, setActiveItem, isExpanded, setIsExpa
       id: 'leave',
       name: 'Apply Leave',
       icon: <MdEventNote className="w-5 h-5" />,
+      hideFor: ['warden']
+    },
+    {
+      id: 'track-van',
+      name: 'Track Van',
+      icon: <MdDashboard className="w-5 h-5" />, // Re-using MdDashboard or MdBus if available
       hideFor: ['warden']
     }
   ].filter(item => {

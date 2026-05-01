@@ -65,15 +65,19 @@ const Library = () => {
     setLoading(true);
     try {
       const studentId = currentStudent.id;
-      if (activeTab === 'issued') {
-        const res = await fetchLibrary(studentId);
-        if (res.success) setLibrary(res.data || []);
-      } else if (activeTab === 'browse') {
-        const res = await fetchBrowseBooks(studentId, search);
-        if (res.success) setBrowseBooks(res.data || []);
-      } else if (activeTab === 'requests') {
-        const res = await fetchBookRequests(studentId);
-        if (res.success) setRequests(res.data || []);
+      // Fetch core data in parallel
+      const [libRes, reqRes] = await Promise.all([
+        fetchLibrary(studentId),
+        fetchBookRequests(studentId)
+      ]);
+
+      if (libRes.success) setLibrary(libRes.data || []);
+      if (reqRes.success) setRequests(reqRes.data || []);
+
+      // If on browse tab, also fetch that
+      if (activeTab === 'browse') {
+        const browseRes = await fetchBrowseBooks(studentId, search);
+        if (browseRes.success) setBrowseBooks(browseRes.data || []);
       }
     } catch (error) {
       toast.error('Failed to load library data');
@@ -84,25 +88,32 @@ const Library = () => {
 
   useEffect(() => {
     loadData();
-  }, [currentStudent?.id, activeTab]);
+  }, [currentStudent?.id]);
 
-  // Handle search with debounce/trigger
+  // Handle tab switches and search
   useEffect(() => {
     if (activeTab === 'browse') {
-      const timer = setTimeout(() => {
-        loadData();
-      }, 500);
+      const timer = setTimeout(async () => {
+        const res = await fetchBrowseBooks(currentStudent.id, search);
+        if (res.success) setBrowseBooks(res.data || []);
+      }, 300);
       return () => clearTimeout(timer);
     }
-  }, [search]);
+  }, [activeTab, search, currentStudent?.id]);
 
   const stats = useMemo(() => ({
     total:    library.length,
     issued:   library.filter(b => b.status === 'Issued').length,
     returned: library.filter(b => b.status === 'Returned').length,
     overdue:  library.filter(b => b.status === 'Overdue').length,
+    approved: library.filter(b => b.status === 'Approved').length,
     fine:     library.reduce((sum, b) => sum + (b.fine || 0), 0),
-  }), [library]);
+    // Request stats
+    reqTotal:    requests.length,
+    reqPending:  requests.filter(r => r.status?.toLowerCase() === 'pending').length,
+    reqApproved: requests.filter(r => r.status?.toLowerCase() === 'approved').length,
+    reqRejected: requests.filter(r => r.status?.toLowerCase() === 'rejected').length,
+  }), [library, requests]);
 
   const filteredIssued = useMemo(() =>
     library.filter(b => {
@@ -119,8 +130,10 @@ const Library = () => {
       const res = await requestBook(currentStudent.id, bookId);
       if (res.success) {
         toast.success('Book request submitted successfully!');
-        // Refresh local state if in browse tab
-        setBrowseBooks(prev => prev.filter(b => b._id !== bookId));
+        // Refresh requests list
+        const reqRes = await fetchBookRequests(currentStudent.id);
+        if (reqRes.success) setRequests(reqRes.data || []);
+        // Update browse list (optional, maybe wait for reload)
       }
     } catch (error) {
       toast.error(error.message || 'Failed to submit request');
@@ -187,13 +200,14 @@ const Library = () => {
         ))}
       </div>
 
-      {activeTab === 'issued' && (
-        <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Stats Cards - Conditional based on Tab */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {activeTab === 'issued' ? (
+          <>
             {[
-              { label: 'Total Books', value: stats.total,    color: 'bg-indigo-50', iconColor: 'bg-indigo-500', icon: <MdBook className="w-5 h-5" /> },
-              { label: 'Current issued', value: stats.issued,   color: 'bg-blue-50',   iconColor: 'bg-blue-500',   icon: <MdHistory className="w-5 h-5" /> },
+              { label: 'Total Items', value: stats.total,    color: 'bg-indigo-50', iconColor: 'bg-indigo-500', icon: <MdBook className="w-5 h-5" /> },
+              { label: 'Issued', value: stats.issued,   color: 'bg-blue-50',   iconColor: 'bg-blue-500',   icon: <MdHistory className="w-5 h-5" /> },
+              { label: 'Ready to Collect', value: stats.approved, color: 'bg-amber-50', iconColor: 'bg-amber-500', icon: <MdCheckCircle className="w-5 h-5" /> },
               { label: 'Returned',      value: stats.returned, color: 'bg-green-50',  iconColor: 'bg-green-500',  icon: <MdCheckCircle className="w-5 h-5" /> },
               { label: 'Overdue',       value: stats.overdue,  color: 'bg-red-50',    iconColor: 'bg-red-500',    icon: <MdWarning className="w-5 h-5" /> },
             ].map((s, i) => (
@@ -205,7 +219,30 @@ const Library = () => {
                 <p className="text-2xl font-black text-gray-900">{s.value}</p>
               </div>
             ))}
-          </div>
+          </>
+        ) : activeTab === 'requests' ? (
+          <>
+            {[
+              { label: 'Total Requests', value: stats.reqTotal,    color: 'bg-indigo-50', iconColor: 'bg-indigo-500', icon: <MdOutlineSend className="w-5 h-5" /> },
+              { label: 'Pending',      value: stats.reqPending,  color: 'bg-amber-50',  iconColor: 'bg-amber-500',  icon: <MdHistory className="w-5 h-5" /> },
+              { label: 'Approved',     value: stats.reqApproved, color: 'bg-green-50',  iconColor: 'bg-green-500',  icon: <MdCheckCircle className="w-5 h-5" /> },
+              { label: 'Rejected',     value: stats.reqRejected, color: 'bg-red-50',    iconColor: 'bg-red-500',    icon: <MdErrorOutline className="w-5 h-5" /> },
+            ].map((s, i) => (
+              <div key={i} className={`${s.color} rounded-xl p-3.5 border border-white shadow-sm`}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider">{s.label}</p>
+                  <div className={`${s.iconColor} text-white p-1.5 rounded-lg`}>{s.icon}</div>
+                </div>
+                <p className="text-2xl font-black text-gray-900">{s.value}</p>
+              </div>
+            ))}
+          </>
+        ) : null}
+      </div>
+
+      {activeTab === 'issued' && (
+        <>
+          {/* Issued Search & Cards */}
 
           {/* Issued Search & Cards */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">

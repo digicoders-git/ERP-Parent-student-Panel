@@ -14,8 +14,11 @@ import Library from '../dashboard/Library';
 import Attendance from '../dashboard/Attendance';
 import ApplyLeave from '../dashboard/ApplyLeave';
 import WardenServicePanel from '../dashboard/WardenServicePanel';
+import TrackVan from '../transport/TrackVan';
+import { useAuth } from '../../context/AuthContext';
 
 const Layout = ({ children }) => {
+  const { selectedChild } = useAuth();
   const [activeComponent, setActiveComponent] = useState(() => {
     return localStorage.getItem('activeComponent') || 'dashboard';
   });
@@ -41,6 +44,12 @@ const Layout = ({ children }) => {
       case 'library': return <Library />;
       case 'leave': return <ApplyLeave />;
       case 'warden-service': return <WardenServicePanel />;
+      case 'track-van': return (
+        <TrackVan 
+          studentId={selectedChild?.studentId || selectedChild?.id} 
+          branchId={selectedChild?.branch}
+        />
+      );
       default: return <Dashboard onMenuClick={handleMenuClick} />;
     }
   };

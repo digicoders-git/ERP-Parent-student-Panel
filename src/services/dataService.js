@@ -19,7 +19,8 @@ const apiFetch = async (endpoint, options = {}) => {
 
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.message || 'API request failed');
+      const errorMessage = result.error || result.message || 'API request failed';
+      throw new Error(errorMessage);
     }
     return result;
   } catch (error) {
